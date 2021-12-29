@@ -37,7 +37,7 @@ class WheatDataset(Dataset):
             annotation[0, 0] = bbox[0]
             annotation[0, 1] = bbox[1]
             annotation[0, 2] = bbox[0] + bbox[2]
-            annotation[0, 3] = bbox[0] + bbox[3]
+            annotation[0, 3] = bbox[1] + bbox[3]
             # We only have one label "wheat" here
             annotation[0, 4] = 0
 
