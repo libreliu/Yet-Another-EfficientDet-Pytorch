@@ -1,11 +1,73 @@
 import os
 import torch
 import numpy as np
+import pandas as pd
+import ast
 
 from torch.utils.data import Dataset, DataLoader
 from pycocotools.coco import COCO
 import cv2
 
+
+class WheatDataset(Dataset):
+    def __init__(self, root_dir, set="train", transform=None):
+        """Set: train or test"""
+        self.root_dir = root_dir
+        self.transform = transform
+
+        # glob file inside
+        self.set_image_dir = os.path.join(root_dir, set)
+        set_images = os.listdir(self.set_image_dir)
+
+        # delete suffix '.jpg'
+        self.image_ids = [int(name.split(".")[0]) for name in set_images]
+        self.gt_annots = pd.read_csv(
+            os.path.join(root_dir, "train.csv")
+        )
+
+    def load_annotations(self, idx):
+        """annot: [x1 y1 x2 y2 class_id]"""
+        image_idx = self.image_ids[idx]
+        annotations = np.zeros((0, 5))
+        
+        pd_annot_rows = self.gt_annots.loc[ self.gt_annots['image_id'] == image_idx ]
+        for _, data in pd_annot_rows.iterrows():
+            annotation = np.zeros((1, 5))
+            bbox = ast.literal_eval(data['bbox'])
+            annotation[0, 0] = bbox[0]
+            annotation[0, 1] = bbox[1]
+            annotation[0, 2] = bbox[0] + bbox[2]
+            annotation[0, 3] = bbox[0] + bbox[3]
+            # We only have one label "wheat" here
+            annotation[0, 4] = 0
+
+            annotations = np.append(annotations, annotation, axis=0)
+
+        return annotations
+
+    def load_image(self, idx):
+        # pad zero in front
+        # see https://stackoverflow.com/questions/339007/how-to-pad-zeroes-to-a-string
+        image_idx = self.image_ids[idx]
+        filename = f"{image_idx:04}.jpg"
+        path = os.path.join(self.set_image_dir, filename)
+        # print(f"reading {path}")
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        return img.astype(np.float32) / 255.
+
+    def __len__(self):
+        return len(self.image_ids)
+
+    def __getitem__(self, idx):
+        """annot: [x1 y1 x2 y2 class_id]"""
+        img = self.load_image(idx)
+        annot = self.load_annotations(idx)
+        sample = {'img': img, 'annot': annot}
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
 
 class CocoDataset(Dataset):
     def __init__(self, root_dir, set='train2017', transform=None):
